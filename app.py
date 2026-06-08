@@ -1,61 +1,63 @@
 import os
-import tempfile
 import logging
+import threading
+import yt_dlp
+import whisper
+from googletrans import Translator
+from gtts import gTTS
+from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from gtts import gTTS
-import ffmpeg
 
-# Logging ထည့်ထားခြင်းဖြင့် Error ဘယ်မှာတက်လဲ သိနိုင်မယ်
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+# Setup
+logging.basicConfig(level=logging.INFO)
 PORT = int(os.environ.get("PORT", 8080))
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📥 Processing your video...")
+# Flask Health Check
+server = Flask(__name__)
+@server.route('/')
+def home(): return "Bot is running", 200
 
-    video_path = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name
-    output_audio = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False).name
+# Bot Logic
+async def process_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    url = update.message.text
+    await update.message.reply_text("⏳ Processing... ကျေးဇူးပြု၍ ခဏစောင့်ပေးပါ။")
 
     try:
-        # Video ဖိုင်ကို ဒေါင်းလုပ်ဆွဲခြင်း
-        file = await update.message.video.get_file()
-        await file.download_to_drive(video_path)
+        # 1. Download Audio
+        ydl_opts = {'format': 'bestaudio/best', 'outtmpl': 'audio.mp3'}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl: ydl.download([url])
 
-        # ffmpeg ဖြင့် Audio ထုတ်ယူခြင်း (mp3 အဖြစ်)
-        ffmpeg.input(video_path).output(output_audio, ac=1, ar="16000", vn=None).run(overwrite_output=True)
+        # 2. Transcribe (Whisper tiny)
+        model = whisper.load_model("tiny")
+        result = model.transcribe("audio.mp3")
+        eng_text = result["text"]
 
-        # Voice message အဖြစ် ပြန်ပို့ခြင်း
-        with open(output_audio, "rb") as f:
-            await update.message.reply_voice(f)
+        # 3. Translate to Burmese
+        translator = Translator()
+        mm_text = translator.translate(eng_text, dest='my').text
+
+        # 4. Text-to-Speech
+        tts = gTTS(text=mm_text, lang='my')
+        tts.save("output.mp3")
+
+        # 5. Send Audio
+        with open("output.mp3", "rb") as f:
+            await update.message.reply_voice(voice=f, caption="✅ ဘာသာပြန်ပြီးပါပြီ။")
 
     except Exception as e:
-        logging.error(f"Error: {e}")
-        await update.message.reply_text("Error ဖြစ်သွားပါပြီ၊ နောက်တစ်ခါ ထပ်စမ်းကြည့်ပါ။")
-
+        await update.message.reply_text(f"Error: {str(e)}")
     finally:
-        # အသုံးပြုပြီး ဖိုင်များကို ဖျက်ခြင်း
-        for p in [video_path, output_audio]:
-            if os.path.exists(p):
-                os.remove(p)
+        for f in ["audio.mp3", "output.mp3"]:
+            if os.path.exists(f): os.remove(f)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🎬 Bot is alive and ready!")
-
-def main():
-    if not BOT_TOKEN:
-        print("Error: BOT_TOKEN is missing!")
-        return
-
+def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.VIDEO, handle_video))
-
-    print("Bot started...")
-    # Render မှာ run ရင် polling_poll ကို သုံးပါတယ်
+    app.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text("YouTube Link ပို့ပေးပါ")))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_video))
     app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    threading.Thread(target=lambda: server.run(host='0.0.0.0', port=PORT)).start()
+    run_bot()
