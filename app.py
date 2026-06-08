@@ -1,27 +1,38 @@
 import os
-import yt_dlp
+import threading
 from flask import Flask
-from threading import Thread
-from telegram.ext import Application, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 
-# Server အသက်ဝင်ဖို့ (Render က Ping ဖို့)
-app_flask = Flask(__name__)
-@app_flask.route('/')
-def home(): return "Bot is running!"
+# Railway Flask Server
+app = Flask(__name__)
+@app.route('/')
+def home():
+    return "Bot is running!"
 
-def run_flask(): 
-    app_flask.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 # Bot Logic
-async def handle_msg(update, context):
-    await update.message.reply_text("စမ်းသပ်နေပါတယ်... အဆင်ပြေပါတယ်ခင်ဗျာ။")
+async def start(update, context):
+    await update.message.reply_text("Bot အဆင်သင့်ဖြစ်ပါပြီ!")
+
+async def handle_message(update, context):
+    await update.message.reply_text("လက်ခံရရှိပါပြီ။")
+
+def run_bot():
+    token = os.environ.get("BOT_TOKEN")
+    if not token:
+        print("Error: BOT_TOKEN မတွေ့ပါ")
+        return
+    
+    bot_app = ApplicationBuilder().token(token).build()
+    bot_app.add_handler(CommandHandler("start", start))
+    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    print("Bot is polling...")
+    bot_app.run_polling()
 
 if __name__ == "__main__":
-    # Flask Server ကို background မှာ run
-    Thread(target=run_flask).start()
-    
-    # Bot ကို run
-    token = os.getenv("BOT_TOKEN")
-    app = Application.builder().token(token).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
-    app.run_polling()
+    threading.Thread(target=run_flask).start()
+    run_bot()
