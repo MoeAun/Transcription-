@@ -1,38 +1,40 @@
 import os
-import yt_dlp
-import asyncio
-from gtts import gTTS
-from telegram.ext import ApplicationBuilder, MessageHandler, filters
+import threading
+from flask import Flask
+from telegram.ext import ApplicationBuilder
 
-# အသံဖိုင်ထုတ်လုပ်ခြင်း function
-def process_audio(url):
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
-        'outtmpl': 'input.mp3',
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def run_bot():
+    token = os.environ.get("BOT_TOKEN")
+    if not token:
+        print("CRITICAL ERROR: BOT_TOKEN is missing!")
+        return
     
-    tts = gTTS("ဗီဒီယိုမှ အသံကို အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ။", lang='my')
-    tts.save("output.mp3")
-
-async def handle_message(update, context):
-    url = update.message.text
-    await update.message.reply_text("လုပ်ဆောင်နေပါပြီ... ခဏစောင့်ပါ...")
+    # Bot ကို အသစ်ဆောက်ပါ
+    app_bot = ApplicationBuilder().token(token).build()
     
-    try:
-        # loop.run_in_executor ကိုသုံးခြင်းက thread ထက် ပိုပြီး telegram bot နဲ့ အဆင်ပြေပါတယ်
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, process_audio, url)
-        
-        # ဖိုင်ထုတ်ပြီးမှ ပြန်ပို့ခြင်း
-        if os.path.exists("output.mp3"):
-            await update.message.reply_audio(audio=open("output.mp3", "rb"))
-        else:
-            await update.message.reply_text("ဖိုင်ထုတ်ယူရာတွင် အမှားအယွင်းရှိနေပါသည်။")
-            
-    except Exception as e:
-        await update.message.reply_text(f"Error တက်သွားပါသည်: {str(e)}")
+    # ဤနေရာတွင် မည်သည့် Handler မှ မထည့်ရသေးပါက Bot က စာမပြန်ပါ
+    # စမ်းသပ်ရန်အတွက် အောက်ပါ handler လေးထည့်ပါ
+    from telegram.ext import CommandHandler
+    async def start(update, context):
+        await update.message.reply_text("Bot အလုပ်လုပ်နေပါပြီ!")
+    
+    app_bot.add_handler(CommandHandler("start", start))
+    
+    print("Bot is polling...") # ဒီစာသား Log မှာ ပေါ်မှ Bot အလုပ်လုပ်မှာ
+    app_bot.run_polling()
 
-# (Flask run_flask code ကို အောက်တွင် ပုံမှန်အတိုင်း ထားပါ)
+if __name__ == "__main__":
+    # Flask ကို Background မှာ run
+    threading.Thread(target=run_flask).start()
+    # Bot ကို main thread မှာ run
+    run_bot()
