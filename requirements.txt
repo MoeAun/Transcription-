@@ -1,0 +1,7 @@
+python-telegram-bot==20.7
+faster-whisper
+transformers
+torch
+gtts
+ffmpeg-python
+python-dotenv
