@@ -1,38 +1,31 @@
 import os
-import threading
-from flask import Flask
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
-
-# Railway Flask Server
-app = Flask(__name__)
-@app.route('/')
-def home():
-    return "Bot is running!"
-
-def run_flask():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
-
-# Bot Logic
-async def start(update, context):
-    await update.message.reply_text("Bot အဆင်သင့်ဖြစ်ပါပြီ!")
+import yt_dlp
+from gtts import gTTS
+from googletrans import Translator
+from telegram.ext import ApplicationBuilder, MessageHandler, filters
 
 async def handle_message(update, context):
-    await update.message.reply_text("လက်ခံရရှိပါပြီ။")
-
-def run_bot():
-    token = os.environ.get("BOT_TOKEN")
-    if not token:
-        print("Error: BOT_TOKEN မတွေ့ပါ")
-        return
-    
-    bot_app = ApplicationBuilder().token(token).build()
-    bot_app.add_handler(CommandHandler("start", start))
-    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    print("Bot is polling...")
-    bot_app.run_polling()
+    url = update.message.text
+    if "youtube.com" in url or "youtu.be" in url:
+        await update.message.reply_text("ဗီဒီယိုကို လုပ်ဆောင်နေပါပြီ ခဏစောင့်ပါ...")
+        
+        # 1. YouTube မှ အသံဖိုင် ဒေါင်းလုပ်ဆွဲခြင်း
+        ydl_opts = {'format': 'bestaudio', 'outtmpl': 'audio.mp3'}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+            
+        # 2. ဘာသာပြန်ခြင်း (ဒီနေရာမှာ စာသားထုတ်ရန် Whisper လိုအပ်သည်)
+        # အခုလောလောဆယ် စမ်းသပ်ရန်အတွက် ရိုးရှင်းသော အသံဖိုင် ပြန်ထုတ်ခြင်း
+        tts = gTTS("ဒါဟာ ဘာသာပြန်ထားတဲ့ အသံဖိုင်ဖြစ်ပါတယ်", lang='my')
+        tts.save("output.mp3")
+        
+        # 3. အသံဖိုင် ပြန်ပို့ခြင်း
+        await update.message.reply_audio(audio=open("output.mp3", "rb"))
+    else:
+        await update.message.reply_text("ကျေးဇူးပြု၍ YouTube link တစ်ခု ပေးပို့ပါ။")
 
 if __name__ == "__main__":
-    threading.Thread(target=run_flask).start()
-    run_bot()
+    token = os.environ.get("BOT_TOKEN")
+    app = ApplicationBuilder().token(token).build()
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.run_polling()
