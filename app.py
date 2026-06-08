@@ -5,65 +5,41 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from gtts import gTTS
 import ffmpeg
 
-# ========== TOKEN ကို တိုက်ရိုက်ထည့်ပါ ==========
 BOT_TOKEN = "8901325853:AAGitB0XPJf5SFS17NHj80d3g9cFSSBGP9Q"
-# =============================================
 
 async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🎬 Video လက်ခံရရှိပါပြီ။ စတင် processing လုပ်နေပါပြီ... (၂-၃ မိနစ်ခန့် ကြာနိုင်ပါတယ်)")
+    await update.message.reply_text("Processing your video...")
     
     video_path = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name
     audio_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
     output_audio = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False).name
     
     try:
-        # Step 1: Download video
-        await update.message.reply_text("📥 Video download လုပ်နေပါပြီ...")
+        # Download video
         file = await update.message.video.get_file()
         await file.download_to_drive(video_path)
         
-        # Step 2: Extract audio
-        await update.message.reply_text("🎧 Audio ထုတ်ယူနေပါပြီ...")
+        # Extract audio
         ffmpeg.input(video_path).output(audio_path, ac=1, ar="16000").run(quiet=True, overwrite_output=True)
         
-        # Step 3: Transcription (Placeholder for now)
-        await update.message.reply_text("📝 စာသားပြောင်းနေပါပြီ...")
-        transcribed_text = "ဒါက စမ်းသပ်မှု စာသားဖြစ်ပါတယ်။ Video ထဲက စကားပြောကို တကယ်ဖတ်ဖို့ Whisper model ထည့်သွင်းပေးဖို့ လိုပါသေးတယ်။"
-        
-        # Step 4: Translate
-        await update.message.reply_text("🔄 ဘာသာပြန်နေပါပြီ...")
-        translated_text = "This is a test translation. For actual video transcription, Whisper model needs to be properly installed."
-        
-        # Step 5: Text to Speech
-        await update.message.reply_text("🔊 အသံဖိုင် ထုတ်ယူနေပါပြီ...")
-        tts = gTTS(text=translated_text[:300], lang="en", slow=False)
+        # Generate test voice
+        tts = gTTS(text="Hello, your bot is working on Render", lang="en", slow=False)
         tts.save(output_audio)
         
-        # Step 6: Send results
-        await update.message.reply_text(
-            f"**Original (မြန်မာ):**\n{transcribed_text[:400]}\n\n"
-            f"**Translated (English):**\n{translated_text[:400]}",
-            parse_mode="Markdown"
-        )
-        
+        # Send response
+        await update.message.reply_text("✅ Done! Here is your audio.")
         with open(output_audio, "rb") as f:
-            await update.message.reply_voice(voice=f, caption="✅ ဘာသာပြန်ပြီးသော အသံဖိုင်")
+            await update.message.reply_voice(voice=f)
             
     except Exception as e:
-        await update.message.reply_text(f"⚠️ Error: {str(e)[:200]}")
+        await update.message.reply_text(f"Error: {str(e)[:200]}")
     finally:
         for path in [video_path, audio_path, output_audio]:
             if os.path.exists(path):
                 os.unlink(path)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🎬 **Video Translator Bot**\n\n"
-        "Video တစ်ခု ပို့ပေးလိုက်ပါ။\n"
-        "ကျွန်တော် ဘာသာပြန်ပေးပါမယ်။\n\n"
-        "✅ Bot is running 24/7 on Render.com",
-        parse_mode="Markdown"
-    )
+    await update.message.reply_text("🎬 Bot is alive! Send me a video.")
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
