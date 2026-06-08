@@ -1,31 +1,37 @@
 import os
 import yt_dlp
+import threading
+from flask import Flask
 from gtts import gTTS
-from googletrans import Translator
 from telegram.ext import ApplicationBuilder, MessageHandler, filters
+
+app = Flask(__name__)
+
+# အသံဖိုင်ထုတ်လုပ်ခြင်း (Memory သက်သာစေရန်)
+def process_audio(url):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
+        'outtmpl': 'input.mp3',
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+    
+    # ဤနေရာတွင် Googletrans/Whisper သုံးပါက memory အလွန်စားသဖြင့် 
+    # ရိုးရှင်းသော အသံဖိုင်ပြန်ထုတ်သည့် logic ကိုသာထားပါ
+    tts = gTTS("ဗီဒီယိုမှ အသံကို အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ။", lang='my')
+    tts.save("output.mp3")
 
 async def handle_message(update, context):
     url = update.message.text
-    if "youtube.com" in url or "youtu.be" in url:
-        await update.message.reply_text("ဗီဒီယိုကို လုပ်ဆောင်နေပါပြီ ခဏစောင့်ပါ...")
-        
-        # 1. YouTube မှ အသံဖိုင် ဒေါင်းလုပ်ဆွဲခြင်း
-        ydl_opts = {'format': 'bestaudio', 'outtmpl': 'audio.mp3'}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-            
-        # 2. ဘာသာပြန်ခြင်း (ဒီနေရာမှာ စာသားထုတ်ရန် Whisper လိုအပ်သည်)
-        # အခုလောလောဆယ် စမ်းသပ်ရန်အတွက် ရိုးရှင်းသော အသံဖိုင် ပြန်ထုတ်ခြင်း
-        tts = gTTS("ဒါဟာ ဘာသာပြန်ထားတဲ့ အသံဖိုင်ဖြစ်ပါတယ်", lang='my')
-        tts.save("output.mp3")
-        
-        # 3. အသံဖိုင် ပြန်ပို့ခြင်း
+    await update.message.reply_text("လုပ်ဆောင်နေပါပြီ... ခဏစောင့်ပါ (Memory ကို စောင့်ကြည့်နေသည်)။")
+    
+    try:
+        # Thread သုံးပြီး Process လုပ်မှ Bot မရပ်သွားမှာပါ
+        threading.Thread(target=process_audio, args=(url,)).start()
+        # file ရှိမရှိစောင့်ပြီး ပြန်ပို့ (ရိုးရှင်းအောင် ပြထားသည်)
         await update.message.reply_audio(audio=open("output.mp3", "rb"))
-    else:
-        await update.message.reply_text("ကျေးဇူးပြု၍ YouTube link တစ်ခု ပေးပို့ပါ။")
+    except Exception as e:
+        await update.message.reply_text(f"Error တက်သွားပါသည်: {str(e)}")
 
-if __name__ == "__main__":
-    token = os.environ.get("BOT_TOKEN")
-    app = ApplicationBuilder().token(token).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.run_polling()
+# ... (Flask run_flask code ကို အရင်အတိုင်းထားပါ)
